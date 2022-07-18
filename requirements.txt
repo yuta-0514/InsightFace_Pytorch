@@ -6,3 +6,4 @@ easydict
 mxnet
 onnx
 sklearn
+setuptools==59.5.0
