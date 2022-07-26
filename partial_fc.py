@@ -438,6 +438,97 @@ class PartialFCAdamW(torch.nn.Module):
             self.weight_activated.data = state_dict["weight"].to(self.weight_activated.data.device)
 
 
+class NormalFC(torch.nn.Module):
+    _version = 1 
+    def __init__(
+        self,
+        margin_loss: Callable,
+        embedding_size: int,
+        num_classes: int,
+        fp16: bool = False,
+    ):
+        super(NormalFC, self).__init__()
+        assert (
+            distributed.is_initialized()
+        ), "must initialize distributed before create this"
+        self.rank = distributed.get_rank()
+        self.world_size = distributed.get_world_size()
+
+        self.dist_cross_entropy = DistCrossEntropy()
+        self.embedding_size = embedding_size
+        self.fp16 = fp16
+        self.num_local: int = num_classes // self.world_size + int(
+            self.rank < num_classes % self.world_size
+        )
+
+        self.last_batch_size: int = 0
+        self.weight_activated: torch.nn.Parameter
+
+        self.weight_activated = torch.nn.Parameter(torch.normal(0, 0.01, (self.num_local, embedding_size)))
+
+        # margin_loss
+        if isinstance(margin_loss, Callable):
+            self.margin_softmax = margin_loss
+        else:
+            raise
+
+    def forward(
+        self,
+        local_embeddings: torch.Tensor,
+        local_labels: torch.Tensor,
+    ):
+        local_labels.squeeze_()
+        local_labels = local_labels.long()
+
+        batch_size = local_embeddings.size(0)
+        if self.last_batch_size == 0:
+            self.last_batch_size = batch_size
+        assert self.last_batch_size == batch_size, (
+            "last batch size do not equal current batch size: {} vs {}".format(
+            self.last_batch_size, batch_size))
+
+        _gather_embeddings = [
+            torch.zeros((batch_size, self.embedding_size)).cuda()
+            for _ in range(self.world_size)
+        ]
+        _gather_labels = [
+            torch.zeros(batch_size).long().cuda() for _ in range(self.world_size)
+        ]
+        _list_embeddings = AllGather(local_embeddings, *_gather_embeddings)
+        distributed.all_gather(_gather_labels, local_labels)
+
+        embeddings = torch.cat(_list_embeddings)
+        labels = torch.cat(_gather_labels)
+
+        labels = labels.view(-1, 1)
+
+        with torch.cuda.amp.autocast(self.fp16):
+            norm_embeddings = normalize(embeddings)
+            norm_weight_activated = normalize(self.weight_activated)
+            logits = linear(norm_embeddings, norm_weight_activated)
+        if self.fp16:
+            logits = logits.float()
+        logits = logits.clamp(-1, 1)
+
+        logits = self.margin_softmax(logits, labels)
+        loss = self.dist_cross_entropy(logits, labels)
+        return loss
+
+    def state_dict(self, destination=None, prefix="", keep_vars=False):
+        if destination is None: 
+            destination = collections.OrderedDict()
+            destination._metadata = collections.OrderedDict()
+
+        for name, module in self._modules.items():
+            if module is not None:
+                module.state_dict(destination, prefix + name + ".", keep_vars=keep_vars)
+        destination["weight"] = self.weight_activated.data.detach()
+        return destination
+
+    def load_state_dict(self, state_dict, strict: bool = True):
+        self.weight_activated.data = state_dict["weight"].to(self.weight_activated.data.device)
+
+
 class DistCrossEntropyFunc(torch.autograd.Function):
     """
     CrossEntropy loss is calculated in parallel, allreduce denominator into single gpu and calculate softmax.
