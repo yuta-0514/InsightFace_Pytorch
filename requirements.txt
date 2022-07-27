@@ -7,3 +7,9 @@ mxnet
 onnx
 sklearn
 setuptools==59.5.0
+matplotlib
+matplotlib
+opencv-python
+scikit-image
+menpo
+prettytable
