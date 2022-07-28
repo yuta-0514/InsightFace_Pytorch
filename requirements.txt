@@ -11,5 +11,6 @@ matplotlib
 matplotlib
 opencv-python
 scikit-image
+pandas
 menpo
 prettytable
