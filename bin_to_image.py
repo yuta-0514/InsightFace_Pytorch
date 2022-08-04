@@ -38,7 +38,7 @@ class MXFaceDataset(Dataset):
         return len(self.imgidx)
 
 
-train_set = MXFaceDataset('/mnt/train_tmp/faces_emore', 0)
+train_set = MXFaceDataset('/mnt/vgg2', 0)
 
 # len(train_set) -> 5822653
 
@@ -49,7 +49,7 @@ f = open('ms1mv2_path.txt', 'w')
 for i in range(len(train_set)):
     img, label = train_set[i]
     pil_img = Image.fromarray(img)
-    pil_img.save('./ms1mv2/{}.jpg'.format(i))
+    pil_img.save('./vgg2/{}.jpg'.format(i))
     f.write('{}.jpg {}\n'.format(i, label))
     if i % 1000 == 0:
         print('Complete {}images'.format(i))
