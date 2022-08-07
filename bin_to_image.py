@@ -1,6 +1,5 @@
 import numbers
 import os
-
 import mxnet as mx
 import numpy as np
 import torch
@@ -38,21 +37,50 @@ class MXFaceDataset(Dataset):
         return len(self.imgidx)
 
 
-train_set = MXFaceDataset('/mnt/vgg2', 0)
+train_set = MXFaceDataset('/mnt/faces_umd', 0)
 
 # len(train_set) -> 5822653
 
 
 from PIL import Image
-f = open('ms1mv2_path.txt', 'w')
+f = open('faces_umd_path.txt', 'w')
 
 for i in range(len(train_set)):
     img, label = train_set[i]
     pil_img = Image.fromarray(img)
-    pil_img.save('./vgg2/{}.jpg'.format(i))
+    pil_img.save('./faces_umd/{}.jpg'.format(i))
     f.write('{}.jpg {}\n'.format(i, label))
     if i % 1000 == 0:
         print('Complete {}images'.format(i))
 
 f.close()
 
+
+# Write Image_path
+'''
+import glob
+import re
+
+datas=[]
+
+with open('/mnt/faces_umd/faces_umd_path.txt')as f:
+    for data in f:
+        data = data.split()
+
+        datas.append(data[1])
+
+
+mask_path = []
+files = glob.glob("/mnt/faces_umd/faces_umd_masked/*")
+
+for file in files:
+    mask_path.append(file)
+
+
+mask_path = sorted(mask_path, key=lambda s: int(re.search(r'\d+', s).group()))
+
+f = open('faces_umd_masked_path.txt', 'w')
+for i in range(len(mask_path)):
+    f.write(mask_path[i] + ' ' + datas[i] + '\n')
+f.close()
+'''
