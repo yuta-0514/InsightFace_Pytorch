@@ -1,3 +1,28 @@
+# Set up Dataset
+
+PytorchのImagefolderに合わせてDatasetを準備する. <br>
+https://pytorch.org/vision/main/generated/torchvision.datasets.ImageFolder.html
+
+- Example<br>
+ルート<br>
+  │<br>
+  ├─ クラス_01<br>
+  │     ├─ クラス_01 の画像1<br>
+  │     ├─ クラス_01 の画像2<br>
+  │     └─ クラス_01 の画像3<br>
+  │<br>
+  ├─ クラス_02<br>
+  │     ├─ クラス_02 の画像1<br>
+  │     ├─ クラス_02 の画像2<br>
+  │     └─ クラス_02 の画像3<br>
+  │<br>
+  └─ クラス_03<br>
+        ├─ クラス_03 の画像1<br>
+        ├─ クラス_03 の画像2<br>
+        └─ クラス_03 の画像3<br>
+
+---
+
 # Distributed Arcface Training in Pytorch
 
 This is a deep learning library that makes face recognition efficient, and effective, which can train tens of millions
