@@ -4,7 +4,7 @@ import shutil
 
 images = []
 labels = []
-with open('/mnt/ms1mv2/ms1mv2_path.txt') as f:
+with open('/mnt/faces_umd/faces_umd_path.txt') as f:
     for line in f:
         sample = line.strip('\n').split(' ')
         images.append(sample[0])
@@ -16,5 +16,10 @@ for i, label in enumerate(labels):
     if not os.path.isdir(folder_dir):
         os.mkdir(folder_dir)
     # copy image + rename
-    image = os.path.join('/mnt/ms1mv2/ms1mv2/', images[i])
+    image = os.path.join('/mnt/faces_umd/faces_umd/', images[i])
     shutil.copy(image, folder_dir)
+
+# import glob
+# cnt = glob.glob('/mnt/umd_face/*/*.jpg')
+# import pdb
+# pdb.set_trace()

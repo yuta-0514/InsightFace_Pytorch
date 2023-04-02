@@ -21,6 +21,16 @@ https://pytorch.org/vision/main/generated/torchvision.datasets.ImageFolder.html
         ├─ クラス_03 の画像2<br>
         └─ クラス_03 の画像3<br>
 
+# Experiments
+
+- ArcFace<br>
+
+  - Non-Mask vs Non-Mask<br>
+      
+    |  Methods  | 1e-06 | 1e-05 | 0.0001 | 0.001 |  0.01 |  0.1  |
+    | -- | -- | -- | -- | -- | -- | -- |
+    | ijbc-IJBC | 67.89 | 76.24 | 85.30  | 92.34 | 96.32 | 98.72 |
+
 ---
 
 # Distributed Arcface Training in Pytorch
