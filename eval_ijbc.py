@@ -37,6 +37,9 @@ parser.add_argument('--batch-size', default=128, type=int, help='')
 parser.add_argument('--network', default='r50', type=str, help='')
 parser.add_argument('--job', default='insightface', type=str, help='job name')
 parser.add_argument('--target', default='IJBC', type=str, help='target, set to IJBC or IJBB')
+parser.add_argument('--mode', default='n_n', type=str, 
+                    help='set mode, [nomask_nomask], [nomask_mask] or [mask_mask]', 
+                    choices=['n_n', 'n_m', 'm_m'])
 args = parser.parse_args()
 
 target = args.target
@@ -353,7 +356,12 @@ print('Time: %.2f s. ' % (stop - start))
 #           img_feats: [image_num x feats_dim] (227630, 512)
 # =============================================================
 start = timeit.default_timer()
-img_path = '%s/loose_crop' % image_path
+if args.mode == 'n_n':
+    img_path = '%s/loose_crop' % image_path
+elif args.mode == 'n_m':
+    img_path = '%s/nomask_vs_mask' % image_path
+elif args.mode == 'm_m':
+    img_path = '%s/mask_vs_mask' % image_path
 img_list_path = '%s/meta/%s_name_5pts_score.txt' % (image_path, target.lower())
 img_list = open(img_list_path)
 files = img_list.readlines()

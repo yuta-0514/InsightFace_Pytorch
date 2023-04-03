@@ -31,6 +31,16 @@ https://pytorch.org/vision/main/generated/torchvision.datasets.ImageFolder.html
     | -- | -- | -- | -- | -- | -- | -- |
     | ijbc-IJBC | 67.89 | 76.24 | 85.30  | 92.34 | 96.32 | 98.72 |
 
+  - Non-Mask vs Mask
+
+    |  Methods  | 1e-06 | 1e-05 | 0.0001 | 0.001 |  0.01 |  0.1  |
+    | -- | -- | -- | -- | -- | -- | -- |
+    | ijbc-IJBC | 62.54 | 72.34 | 82.48  | 91.06 | 95.87 | 98.59 |
+
+  - Mask vs Mask
+    |  Methods  | 1e-06 | 1e-05 | 0.0001 | 0.001 |  0.01 |  0.1  |
+    | -- | -- | -- | -- | -- | -- | -- |
+    | ijbc-IJBC | 57.69 | 68.28 | 79.62  | 89.52 | 95.43 | 98.50 |
 ---
 
 # Distributed Arcface Training in Pytorch
