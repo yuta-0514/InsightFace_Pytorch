@@ -19,7 +19,7 @@ config.lr = 0.1
 config.verbose = 2000
 config.dali = False
 
-config.rec = "/mnt/umd_face"
+config.rec = "/mnt/CelebA"
 config.num_classes = 8277
 config.num_image = 367888
 config.num_epoch = 20
