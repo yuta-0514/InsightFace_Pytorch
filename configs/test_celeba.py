@@ -20,8 +20,8 @@ config.verbose = 2000
 config.dali = False
 
 config.rec = "/mnt/CelebA"
-config.num_classes = 8277
-config.num_image = 367888
+config.num_classes = 10177
+config.num_image = 202599
 config.num_epoch = 20
 config.warmup_epoch = 0
 config.val_targets = ['lfw', 'cfp_fp', "agedb_30"]

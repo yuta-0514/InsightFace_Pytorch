@@ -40,19 +40,11 @@ def get_dataloader(
 
     # Image Folder
     else:
-        if root_dir == '/mnt/CelebA':
-            transform = transforms.Compose([
-                transforms.RandomHorizontalFlip(),
-                transforms.Resize(size=(112, 112)),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
-                ])
-        else:
-            transform = transforms.Compose([
-                transforms.RandomHorizontalFlip(),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
-                ])            
+        transform = transforms.Compose([
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+            ])            
         train_set = ImageFolder(root_dir, transform)
 
     # DALI
