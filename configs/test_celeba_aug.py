@@ -19,7 +19,7 @@ config.lr = 0.1
 config.verbose = 2000
 config.dali = False
 
-config.rec = "/mnt/CelebA"
+config.rec = "/mnt/CelebA_scale"
 config.num_classes = 10177
 config.num_image = 202599
 config.num_epoch = 20
