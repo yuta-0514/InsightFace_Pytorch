@@ -37,18 +37,16 @@ class MXFaceDataset(Dataset):
         return len(self.imgidx)
 
 
-train_set = MXFaceDataset('/mnt/faces_umd', 0)
-
-# len(train_set) -> 5822653
+train_set = MXFaceDataset('/mnt/faces_webface_112x112', 0)
 
 
 from PIL import Image
-f = open('faces_umd_path.txt', 'w')
+f = open('faces_webface.txt', 'w')
 
 for i in range(len(train_set)):
     img, label = train_set[i]
     pil_img = Image.fromarray(img)
-    pil_img.save('./faces_umd/{}.jpg'.format(i))
+    pil_img.save('./faces_webface/{}.jpg'.format(i))
     f.write('{}.jpg {}\n'.format(i, label))
     if i % 1000 == 0:
         print('Complete {}images'.format(i))
