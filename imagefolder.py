@@ -3,6 +3,7 @@ import os.path
 from typing import Any, Callable, cast, Dict, List, Optional, Tuple, Union
 
 from PIL import Image
+import cv2
 
 from torchvision.datasets import VisionDataset
 
@@ -231,8 +232,11 @@ class DatasetFolder(VisionDataset):
             sample = self.transform(sample)
         if self.target_transform is not None:
             target = self.target_transform(target)
+        path = path.replace("umd_face", "umd_face_u2net")
+        path = path.replace("jpg", "png")
+        saliency_map = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
 
-        return sample, target, path
+        return sample, target, saliency_map
 
     def __len__(self) -> int:
         return len(self.samples)

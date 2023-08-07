@@ -119,8 +119,6 @@ class DataLoaderX(DataLoader):
 
     def preload(self):
         self.batch = next(self.iter, None)
-        self.path = self.batch[2]
-        self.batch = self.batch[:2]
         if self.batch is None:
             return None
         with torch.cuda.stream(self.stream):
@@ -133,7 +131,7 @@ class DataLoaderX(DataLoader):
         if batch is None:
             raise StopIteration
         self.preload()
-        return batch, self.path
+        return batch
 
 
 class MXFaceDataset(Dataset):
