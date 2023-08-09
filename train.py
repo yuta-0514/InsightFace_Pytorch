@@ -151,10 +151,11 @@ def main(args):
             train_loader.sampler.set_epoch(epoch)
         for _, (img, local_labels, saliency_map) in enumerate(train_loader):
             global_step += 1
-            backbone.requires_grad_(False) 
             local_embeddings, seg = backbone(img)
-            backbone.requires_grad_(True) 
-            loss: torch.Tensor = module_partial_fc(local_embeddings, local_labels, opt)
+            
+            sum_of_parameters = sum(p.sum() for p in backbone.parameters())
+            zero_sum = sum_of_parameters * 0.0
+            loss: torch.Tensor = module_partial_fc(local_embeddings, local_labels, opt) + zero_sum
 
             if cfg.fp16:
                 amp.scale(loss).backward()
