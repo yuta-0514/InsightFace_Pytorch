@@ -11,7 +11,7 @@ from functools import partial
 from torch import distributed
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
-# from torchvision.datasets import ImageFolder]
+# from torchvision.datasets import ImageFolder
 from imagefolder import ImageFolder
 from utils.utils_distributed_sampler import DistributedSampler
 from utils.utils_distributed_sampler import get_dist_info, worker_init_fn
