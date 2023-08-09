@@ -64,6 +64,64 @@ class IBasicBlock(nn.Module):
             return self.forward_impl(x)
 
 
+class Bottleneck(nn.Module):
+    expansion = 4
+    def __init__(self, inplanes, planes, stride=1, dilation=1, downsample=None):
+        super(Bottleneck, self).__init__()
+        self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, stride=stride, bias=False) # change
+        self.bn1 = nn.BatchNorm2d(planes,affine = True)
+        for i in self.bn1.parameters():
+            i.requires_grad = False
+
+        padding = dilation
+        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1, # change
+                               padding=padding, bias=False, dilation = dilation)
+        self.bn2 = nn.BatchNorm2d(planes,affine = True)
+        for i in self.bn2.parameters():
+            i.requires_grad = False
+        self.conv3 = nn.Conv2d(planes, planes * 4, kernel_size=1, bias=False)
+        self.bn3 = nn.BatchNorm2d(planes * 4, affine = True)
+        for i in self.bn3.parameters():
+            i.requires_grad = False
+        self.relu = nn.ReLU(inplace=True)
+        self.downsample = downsample
+        self.stride = stride
+
+    def forward(self, x):
+        residual = x
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.relu(out)
+        out = self.conv3(out)
+        out = self.bn3(out)
+        if self.downsample is not None:
+            residual = self.downsample(x)
+        out += residual
+        out = self.relu(out)
+        return out
+
+
+class Classifier_Module(nn.Module):
+
+    def __init__(self, dilation_series, padding_series, num_classes):
+        super(Classifier_Module, self).__init__()
+        self.conv2d_list = nn.ModuleList()
+        for dilation, padding in zip(dilation_series, padding_series):
+            self.conv2d_list.append(nn.Conv2d(2048, num_classes, kernel_size=3, stride=1, padding=padding, dilation=dilation, bias = True))
+
+        for m in self.conv2d_list:
+            m.weight.data.normal_(0, 0.01)
+
+    def forward(self, x):
+        out = self.conv2d_list[0](x)
+        for i in range(len(self.conv2d_list)-1):
+            out += self.conv2d_list[i+1](x)
+        return out
+
+
 class IResNet(nn.Module):
     fc_scale = 7 * 7
     def __init__(self,
@@ -118,6 +176,29 @@ class IResNet(nn.Module):
             for m in self.modules():
                 if isinstance(m, IBasicBlock):
                     nn.init.constant_(m.bn2.weight, 0)
+        
+        self.seg_layer1 = self._make_seg_layer(Bottleneck, 512, 3, stride=1, dilation=4)
+        num_classes = 3
+        self.seg_layer2 = self._make_pred_layer(Classifier_Module, [6,12,18,24], [6,12,18,24], num_classes+1)
+
+    def _make_seg_layer(self, block, planes, blocks, stride=1, dilation=1):
+        downsample = None
+        if stride != 1 or self.inplanes != planes * block.expansion or dilation == 2 or dilation == 4:
+            downsample = nn.Sequential(
+                nn.Conv2d(256, planes * block.expansion,
+                          kernel_size=1, stride=stride, bias=False),
+                nn.BatchNorm2d(planes * block.expansion,affine = True))
+        for i in downsample._modules['1'].parameters():
+            i.requires_grad = False
+        layers = []
+        layers.append(block(256, planes, stride,dilation=dilation, downsample=downsample))
+        self.inplanes = planes * block.expansion
+        for i in range(1, blocks):
+            layers.append(block(self.inplanes, planes, dilation=dilation))
+        return nn.Sequential(*layers)
+
+    def _make_pred_layer(self,block, dilation_series, padding_series,num_classes):
+        return block(dilation_series,padding_series,num_classes)
 
     def _make_layer(self, block, planes, blocks, stride=1, dilate=False):
         downsample = None
@@ -153,13 +234,16 @@ class IResNet(nn.Module):
             x = self.layer1(x)
             x = self.layer2(x)
             x = self.layer3(x)
+            seg = x
+            seg = self.seg_layer1(seg)
+            seg = self.seg_layer2(seg)
             x = self.layer4(x)
             x = self.bn2(x)
             x = torch.flatten(x, 1)
             x = self.dropout(x)
         x = self.fc(x.float() if self.fp16 else x)
         x = self.features(x)
-        return x
+        return x, seg
 
 
 def _iresnet(arch, block, layers, pretrained, progress, **kwargs):
