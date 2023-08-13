@@ -258,7 +258,13 @@ def main(args):
 
             tps.reset_control_points()
             images_tps = tps(images_cj)
-            _, pred_low_tps = backbone(images_tps)
+
+            # NOTE: backbone -> backbone_scops
+            # _, pred_low_tps = backbone(images_tps)
+            backbone_scops = get_model(
+                cfg.network, dropout=0.0, fp16=cfg.fp16, num_features=cfg.embedding_size).cuda()
+            _, pred_low_tps = backbone_scops(images_tps)
+            
             pred_tps = interp(pred_low_tps)
             pred_d = pred.detach()
             pred_d.requires_grad = False
@@ -287,14 +293,13 @@ def main(args):
             sum_of_parameters = sum(p.sum() for p in backbone.parameters())
             zero_sum = sum_of_parameters * 0.0
 
-            loss: torch.Tensor = module_partial_fc(local_embeddings, local_labels, opt) + zero_sum
+            loss: torch.Tensor = module_partial_fc(local_embeddings, local_labels, opt) + zero_sum 
             
             final_loss = 0.5*loss + 0.5*loss_seg
             
             if cfg.fp16:
-                amp.scale(loss).backward()
-                import pdb
-                pdb.set_trace()
+                # amp.scale(loss).backward()
+                amp.scale(final_loss).backward()
                 amp.unscale_(opt)
                 torch.nn.utils.clip_grad_norm_(backbone.parameters(), 5)
                 amp.step(opt)
