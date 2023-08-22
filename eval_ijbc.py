@@ -30,7 +30,7 @@ warnings.filterwarnings("ignore")
 
 parser = argparse.ArgumentParser(description='do ijb test')
 # general
-parser.add_argument('--model-prefix', default='./work_dirs/test_r50/model.pt', help='path to load model.')
+parser.add_argument('--model-prefix', default='./work_dirs/test_umb/model.pt', help='path to load model.')
 parser.add_argument('--image-path', default='/mnt/IJB/IJBC', type=str, help='')
 parser.add_argument('--result-dir', default='./', type=str, help='')
 parser.add_argument('--batch-size', default=128, type=int, help='')
@@ -107,7 +107,7 @@ class Embedding(object):
     def forward_db(self, batch_data):
         imgs = torch.Tensor(batch_data).cuda()
         imgs.div_(255).sub_(0.5).div_(0.5)
-        feat = self.model(imgs)
+        feat, _ = self.model(imgs)
         feat = feat.reshape([self.batch_size, 2 * feat.shape[1]])
         return feat.cpu().numpy()
 
