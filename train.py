@@ -291,7 +291,7 @@ def main(args):
 
             loss: torch.Tensor = module_partial_fc(local_embeddings, local_labels, opt) + zero_sum
             
-            final_loss = 0.5*loss + 0.5*loss_seg
+            final_loss = (loss + loss_seg) / 2
             
             if cfg.fp16:
                 # amp.scale(loss).backward()
