@@ -243,6 +243,7 @@ class IResNet(nn.Module):
             x = self.dropout(x)
         x = self.fc(x.float() if self.fp16 else x)
         x = self.features(x)
+        seg = seg.float() if self.fp16 else seg
         return x, seg
 
 

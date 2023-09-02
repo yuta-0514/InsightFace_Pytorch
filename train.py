@@ -18,6 +18,13 @@ from utils.utils_config import get_config
 from utils.utils_logging import AverageMeter, init_logging
 from utils.utils_distributed_sampler import setup_seed
 
+#SCOPS
+from torchvision import transforms
+import loss_scops
+import utils_scops
+from model.feature_extraction import FeatureExtraction, featureL2Norm
+from tps.rand_tps import RandTPS
+
 assert torch.__version__ >= "1.9.0", "In order to enjoy the features of the new torch, \
 we have upgraded the torch to 1.9.0. torch before than 1.9.0 may not work in the future."
 
@@ -34,6 +41,25 @@ except KeyError:
         rank=rank,
         world_size=world_size,
     )
+
+
+IMG_MEAN = np.array((104.00698793, 116.66876762,
+                     122.67891434), dtype=np.float32)
+
+
+class PartBasisGenerator(torch.nn.Module):
+    def __init__(self, feature_dim, K, normalize=False):
+        super(PartBasisGenerator, self).__init__()
+        self.w = torch.nn.Parameter(
+            torch.abs(torch.cuda.FloatTensor(K, feature_dim).normal_()))
+        self.normalize = normalize
+
+    def forward(self, x=None):
+        out = torch.nn.ReLU()(self.w)
+        if self.normalize:
+            return featureL2Norm(out)
+        else:
+            return out
 
 
 def main(args):
@@ -72,7 +98,7 @@ def main(args):
 
     backbone.train()
     # FIXME using gradient checkpoint if there are some unused parameters will cause error
-    backbone._set_static_graph()
+    # backbone._set_static_graph()
 
     margin_loss = CombinedMarginLoss(
         64,
@@ -145,24 +171,138 @@ def main(args):
     loss_am = AverageMeter()
     amp = torch.cuda.amp.grad_scaler.GradScaler(growth_interval=100)
 
+    # SCOPS---------------------
+    # Initialize spatial/color transform for Equuivariance loss.
+    tps = RandTPS(cfg.input_size[1], cfg.input_size[0],
+                  batch_size=cfg.batch_size,
+                  sigma=cfg.tps_sigma,
+                  border_padding=False, random_mirror=False,
+                  random_scale=(cfg.random_scale_low, cfg.random_scale_high),
+                  mode=cfg.tps_mode).cuda(cfg.gpu)
+
+    # Color Transorm.
+    cj_transform = transforms.Compose([
+        transforms.ToPILImage(),
+        transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.2, hue=0.2),
+        transforms.ToTensor(), ])
+
+    # KL divergence loss for equivariance
+    kl = torch.nn.KLDivLoss().cuda(cfg.gpu)
+
+    # loss/ bilinear upsampling
+    interp = torch.nn.Upsample(
+        size=(cfg.input_size[1], cfg.input_size[0]), mode='bilinear', align_corners=True)
+
+    # Initialize feature extractor and part basis for the semantic consistency loss.
+    zoo_feat_net = FeatureExtraction(
+        feature_extraction_cnn=cfg.ref_net, normalization=cfg.ref_norm, last_layer=cfg.ref_layer)
+    zoo_feat_net.eval()
+
+    part_basis_generator = PartBasisGenerator(zoo_feat_net.out_dim, cfg.num_parts, normalize=cfg.ref_norm)
+    part_basis_generator.cuda(cfg.gpu)
+    part_basis_generator.train()
+
+    # Initialize optimizers.
+    optimizer_sc = torch.optim.SGD(part_basis_generator.parameters(
+    ), lr=cfg.learning_rate_w, momentum=cfg.momentum, weight_decay=cfg.weight_decay)
+    optimizer_sc.zero_grad()
+    #---------------------------
+
     for epoch in range(start_epoch, cfg.num_epoch):
 
         if isinstance(train_loader, DataLoader):
             train_loader.sampler.set_epoch(epoch)
         for _, (img, local_labels, saliency_map) in enumerate(train_loader):
             global_step += 1
-            local_embeddings, seg = backbone(img)
+            local_embeddings, pred_low = backbone(img)
+            
+            # SCOSPS---------------------
+            optimizer_sc.zero_grad()
+            
+            pred = interp(pred_low)
+            # prepare for torch model_zoo models images
+            zoo_mean = np.array([0.485, 0.456, 0.406]).reshape((1, 3, 1, 1))
+            zoo_var = np.array([0.229, 0.224, 0.225]).reshape((1, 3, 1, 1))
+            images_zoo_cpu = (img.cpu().numpy() +
+                            IMG_MEAN.reshape((1, 3, 1, 1))) / 255.0
+            images_zoo_cpu -= zoo_mean
+            images_zoo_cpu /= zoo_var
+
+            images_zoo_cpu = torch.from_numpy(images_zoo_cpu)
+            images_zoo = images_zoo_cpu.cuda(cfg.gpu)
+
+            with torch.no_grad():
+                zoo_feats = zoo_feat_net(images_zoo)
+                zoo_feat = torch.cat([interp(zoo_feat)
+                                      for zoo_feat in zoo_feats], dim=1)
+                # saliency masking
+                zoo_feat = zoo_feat * \
+                    saliency_map.unsqueeze(dim=1).expand_as(zoo_feat).cuda(cfg.gpu)
+            
+            loss_sc = loss_scops.semantic_consistency_loss(
+                features=zoo_feat, pred=pred, basis=part_basis_generator())
+            
+            # orthonomal_loss
+            loss_orthonamal = loss_scops.orthonomal_loss(part_basis_generator())
+
+            # Concentratin Loss
+            loss_con = loss_scops.concentration_loss(pred)
+
+            # Equivariance Loss
+            images_cj = torch.from_numpy(
+                ((img.cpu().numpy() + IMG_MEAN.reshape((1, 3, 1, 1))) / 255.0).clip(0, 1.0))
+            for b in range(images_cj.shape[0]):
+                images_cj[b] = torch.from_numpy(cj_transform(
+                    images_cj[b]).numpy() * 255.0 - IMG_MEAN.reshape((1, 3, 1, 1)))
+            images_cj = images_cj.cuda()
+
+            tps.reset_control_points()
+            images_tps = tps(images_cj)
+
+            _, pred_low_tps = backbone(images_tps)
+            
+            pred_tps = interp(pred_low_tps)
+            pred_d = pred.detach()
+            pred_d.requires_grad = False
+            
+            # no padding in the prediction space
+            pred_tps_org = tps(pred_d, padding_mode='zeros')
+
+            loss_eqv = kl(torch.nn.functional.log_softmax(pred_tps, dim=1),
+                          torch.nn.functional.softmax(pred_tps_org, dim=1))
+
+            centers_tps = utils_scops.batch_get_centers(torch.nn.Softmax(dim=1)(pred_tps)[:, 1:, :, :])
+            pred_tps_org_dif = tps(pred, padding_mode='zeros')
+            centers_tps_org = utils_scops.batch_get_centers(torch.nn.Softmax(
+                dim=1)(pred_tps_org_dif)[:, 1:, :, :])
+
+            loss_lmeqv = torch.nn.functional.mse_loss(centers_tps, centers_tps_org)
+
+            # sum all loss terms
+            loss_seg = cfg.lambda_con * loss_con \
+                + cfg.lambda_eqv * loss_eqv \
+                + cfg.lambda_lmeqv * loss_lmeqv \
+                + cfg.lambda_sc * loss_sc \
+                + cfg.lambda_orthonormal * loss_orthonamal
+            # ---------------------------
             
             sum_of_parameters = sum(p.sum() for p in backbone.parameters())
             zero_sum = sum_of_parameters * 0.0
-            loss: torch.Tensor = module_partial_fc(local_embeddings, local_labels, opt) + zero_sum
 
+            loss: torch.Tensor = module_partial_fc(local_embeddings, local_labels, opt) + zero_sum
+            
+            final_loss = (loss + loss_seg) / 2
+            
             if cfg.fp16:
-                amp.scale(loss).backward()
+                # amp.scale(loss).backward()
+                amp.scale(final_loss).backward()
                 amp.unscale_(opt)
                 torch.nn.utils.clip_grad_norm_(backbone.parameters(), 5)
                 amp.step(opt)
                 amp.update()
+                
+                torch.nn.utils.clip_grad_norm_(part_basis_generator.parameters(), 5)
+                optimizer_sc.step()
             else:
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(backbone.parameters(), 5)
