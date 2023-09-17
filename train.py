@@ -170,6 +170,10 @@ def main(args):
 
     loss_am = AverageMeter()
     amp = torch.cuda.amp.grad_scaler.GradScaler(growth_interval=100)
+    from pcgrad_amp import PCGradAMP
+    num_tasks = 2
+    grad_optimizer = PCGradAMP(num_tasks, opt, scaler=amp, reduction='sum', cpu_offload= False, backbone=backbone)
+
 
     # SCOPS---------------------
     # Initialize spatial/color transform for Equuivariance loss.
@@ -257,31 +261,9 @@ def main(args):
             images_cj = images_cj.cuda()
 
             tps.reset_control_points()
-            images_tps = tps(images_cj)
-
-            _, pred_low_tps = backbone(images_tps)
-            
-            pred_tps = interp(pred_low_tps)
-            pred_d = pred.detach()
-            pred_d.requires_grad = False
-            
-            # no padding in the prediction space
-            pred_tps_org = tps(pred_d, padding_mode='zeros')
-
-            loss_eqv = kl(torch.nn.functional.log_softmax(pred_tps, dim=1),
-                          torch.nn.functional.softmax(pred_tps_org, dim=1))
-
-            centers_tps = utils_scops.batch_get_centers(torch.nn.Softmax(dim=1)(pred_tps)[:, 1:, :, :])
-            pred_tps_org_dif = tps(pred, padding_mode='zeros')
-            centers_tps_org = utils_scops.batch_get_centers(torch.nn.Softmax(
-                dim=1)(pred_tps_org_dif)[:, 1:, :, :])
-
-            loss_lmeqv = torch.nn.functional.mse_loss(centers_tps, centers_tps_org)
 
             # sum all loss terms
             loss_seg = cfg.lambda_con * loss_con \
-                + cfg.lambda_eqv * loss_eqv \
-                + cfg.lambda_lmeqv * loss_lmeqv \
                 + cfg.lambda_sc * loss_sc \
                 + cfg.lambda_orthonormal * loss_orthonamal
             # ---------------------------
@@ -291,15 +273,11 @@ def main(args):
 
             loss: torch.Tensor = module_partial_fc(local_embeddings, local_labels, opt) + zero_sum
             
-            final_loss = (loss + loss_seg) / 2
             
             if cfg.fp16:
-                # amp.scale(loss).backward()
-                amp.scale(final_loss).backward()
-                amp.unscale_(opt)
-                torch.nn.utils.clip_grad_norm_(backbone.parameters(), 5)
-                amp.step(opt)
-                amp.update()
+                grad_optimizer.backward([loss, loss_seg])
+                # torch.nn.utils.clip_grad_norm_(backbone.parameters(), 5)
+                grad_optimizer.step() 
                 
                 torch.nn.utils.clip_grad_norm_(part_basis_generator.parameters(), 5)
                 optimizer_sc.step()
@@ -308,7 +286,7 @@ def main(args):
                 torch.nn.utils.clip_grad_norm_(backbone.parameters(), 5)
                 opt.step()
 
-            opt.zero_grad()
+            grad_optimizer.zero_grad()
             lr_scheduler.step()
 
             with torch.no_grad():
