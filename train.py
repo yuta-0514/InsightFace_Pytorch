@@ -108,6 +108,12 @@ def main(args):
         cfg.interclass_filtering_threshold
     )
 
+    from loss_weight import UncertainLossWeighter
+    num_tasks = 2
+    #loss_weighter = None
+    loss_weighter = UncertainLossWeighter(num_tasks).cuda()
+
+
     if cfg.optimizer == "sgd":
         module_partial_fc = PartialFC(
             margin_loss, cfg.embedding_size, cfg.num_classes,
@@ -115,7 +121,7 @@ def main(args):
         module_partial_fc.train().cuda()
         # TODO the params of partial fc must be last in the params list
         opt = torch.optim.SGD(
-            params=[{"params": backbone.parameters()}, {"params": module_partial_fc.parameters()}],
+            params=[{"params": backbone.parameters()}, {"params": loss_weighter.parameters()}, {"params": module_partial_fc.parameters()}],
             lr=cfg.lr, momentum=0.9, weight_decay=cfg.weight_decay)
 
     elif cfg.optimizer == "adamw":
@@ -272,10 +278,12 @@ def main(args):
             zero_sum = sum_of_parameters * 0.0
 
             loss: torch.Tensor = module_partial_fc(local_embeddings, local_labels, opt) + zero_sum
+
+            losses = loss_weighter([loss, loss_seg])
             
             
             if cfg.fp16:
-                grad_optimizer.backward([loss, loss_seg])
+                grad_optimizer.backward(losses)
                 # torch.nn.utils.clip_grad_norm_(backbone.parameters(), 5)
                 grad_optimizer.step() 
                 
