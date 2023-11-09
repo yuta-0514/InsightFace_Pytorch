@@ -38,8 +38,8 @@ parser.add_argument('--network', default='r50', type=str, help='')
 parser.add_argument('--job', default='insightface', type=str, help='job name')
 parser.add_argument('--target', default='IJBC', type=str, help='target, set to IJBC or IJBB')
 parser.add_argument('--mode', default='n_n', type=str, 
-                    help='set mode, [nomask_nomask], [nomask_mask] or [mask_mask]', 
-                    choices=['n_n', 'n_m', 'm_m'])
+                    help='set mode, [nomask_nomask], [nomask_mask] or [mask_mask] or [mosaic]', 
+                    choices=['n_n', 'n_m', 'm_m', 'mosaic'])
 args = parser.parse_args()
 
 target = args.target
@@ -107,7 +107,7 @@ class Embedding(object):
     def forward_db(self, batch_data):
         imgs = torch.Tensor(batch_data).cuda()
         imgs.div_(255).sub_(0.5).div_(0.5)
-        feat, _ = self.model(imgs)
+        feat = self.model(imgs)
         feat = feat.reshape([self.batch_size, 2 * feat.shape[1]])
         return feat.cpu().numpy()
 
@@ -362,6 +362,8 @@ elif args.mode == 'n_m':
     img_path = '%s/nomask_vs_mask' % image_path
 elif args.mode == 'm_m':
     img_path = '%s/mask_vs_mask' % image_path
+elif args.mode == 'mosaic':
+    img_path = '%s/mosaic' % image_path
 img_list_path = '%s/meta/%s_name_5pts_score.txt' % (image_path, target.lower())
 img_list = open(img_list_path)
 files = img_list.readlines()
