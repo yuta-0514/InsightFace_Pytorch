@@ -30,7 +30,7 @@ warnings.filterwarnings("ignore")
 
 parser = argparse.ArgumentParser(description='do ijb test')
 # general
-parser.add_argument('--model-prefix', default='./work_dirs/test_r50/model.pt', help='path to load model.')
+parser.add_argument('--model-prefix', default='./work_dirs/test_umb/model.pt', help='path to load model.')
 parser.add_argument('--image-path', default='/mnt/IJB/IJBC', type=str, help='')
 parser.add_argument('--result-dir', default='./', type=str, help='')
 parser.add_argument('--batch-size', default=128, type=int, help='')
@@ -38,8 +38,8 @@ parser.add_argument('--network', default='r50', type=str, help='')
 parser.add_argument('--job', default='insightface', type=str, help='job name')
 parser.add_argument('--target', default='IJBC', type=str, help='target, set to IJBC or IJBB')
 parser.add_argument('--mode', default='n_n', type=str, 
-                    help='set mode, [nomask_nomask], [nomask_mask] or [mask_mask]', 
-                    choices=['n_n', 'n_m', 'm_m'])
+                    help='set mode, [nomask_nomask], [nomask_mask] or [mask_mask] or [mosaic]', 
+                    choices=['n_n', 'n_m', 'm_m', 'mosaic'])
 args = parser.parse_args()
 
 target = args.target
@@ -362,6 +362,8 @@ elif args.mode == 'n_m':
     img_path = '%s/nomask_vs_mask' % image_path
 elif args.mode == 'm_m':
     img_path = '%s/mask_vs_mask' % image_path
+elif args.mode == 'mosaic':
+    img_path = '%s/mosaic' % image_path
 img_list_path = '%s/meta/%s_name_5pts_score.txt' % (image_path, target.lower())
 img_list = open(img_list_path)
 files = img_list.readlines()
