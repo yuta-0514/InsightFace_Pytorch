@@ -107,7 +107,7 @@ class Embedding(object):
     def forward_db(self, batch_data):
         imgs = torch.Tensor(batch_data).cuda()
         imgs.div_(255).sub_(0.5).div_(0.5)
-        feat = self.model(imgs)
+        feat, _ = self.model(imgs)
         feat = feat.reshape([self.batch_size, 2 * feat.shape[1]])
         return feat.cpu().numpy()
 
