@@ -62,6 +62,17 @@ class PartBasisGenerator(torch.nn.Module):
             return out
 
 
+def lambda_scheduler(loss, loss_seg, epoch):
+    if epoch <= 2:
+        l = 0.1
+    elif 2 < epoch < 10:
+        l = 0.01
+    else:
+        l = 0
+    total_loss = loss + l*loss_seg
+    return total_loss
+
+
 def main(args):
 
     # get config
@@ -98,7 +109,7 @@ def main(args):
 
     backbone.train()
     # FIXME using gradient checkpoint if there are some unused parameters will cause error
-    # backbone._set_static_graph()
+    backbone._set_static_graph()
 
     margin_loss = CombinedMarginLoss(
         64,
@@ -108,12 +119,6 @@ def main(args):
         cfg.interclass_filtering_threshold
     )
 
-    from loss_weight import UncertainLossWeighter
-    num_tasks = 2
-    #loss_weighter = None
-    loss_weighter = UncertainLossWeighter(num_tasks).cuda()
-
-
     if cfg.optimizer == "sgd":
         module_partial_fc = PartialFC(
             margin_loss, cfg.embedding_size, cfg.num_classes,
@@ -121,7 +126,7 @@ def main(args):
         module_partial_fc.train().cuda()
         # TODO the params of partial fc must be last in the params list
         opt = torch.optim.SGD(
-            params=[{"params": backbone.parameters()}, {"params": loss_weighter.parameters()}, {"params": module_partial_fc.parameters()}],
+            params=[{"params": backbone.parameters()}, {"params": module_partial_fc.parameters()}],
             lr=cfg.lr, momentum=0.9, weight_decay=cfg.weight_decay)
 
     elif cfg.optimizer == "adamw":
@@ -176,10 +181,6 @@ def main(args):
 
     loss_am = AverageMeter()
     amp = torch.cuda.amp.grad_scaler.GradScaler(growth_interval=100)
-    from pcgrad_amp import PCGradAMP
-    num_tasks = 2
-    grad_optimizer = PCGradAMP(num_tasks, opt, scaler=amp, reduction='sum', cpu_offload= False, backbone=backbone)
-
 
     # SCOPS---------------------
     # Initialize spatial/color transform for Equuivariance loss.
@@ -279,22 +280,20 @@ def main(args):
 
             loss: torch.Tensor = module_partial_fc(local_embeddings, local_labels, opt) + zero_sum
 
-            losses = loss_weighter([loss, loss_seg])
-            
+            total_loss = lambda_scheduler(loss, loss_seg, epoch)
             
             if cfg.fp16:
-                grad_optimizer.backward(losses)
-                # torch.nn.utils.clip_grad_norm_(backbone.parameters(), 5)
-                grad_optimizer.step() 
-                
-                torch.nn.utils.clip_grad_norm_(part_basis_generator.parameters(), 5)
-                optimizer_sc.step()
+                amp.scale(total_loss).backward()
+                amp.unscale_(opt)
+                torch.nn.utils.clip_grad_norm_(backbone.parameters(), 5)
+                amp.step(opt)
+                amp.update()
             else:
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(backbone.parameters(), 5)
                 opt.step()
 
-            grad_optimizer.zero_grad()
+            opt.zero_grad()
             lr_scheduler.step()
 
             with torch.no_grad():
