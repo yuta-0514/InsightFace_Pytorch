@@ -64,12 +64,15 @@ class PartBasisGenerator(torch.nn.Module):
 
 def lambda_scheduler(loss, loss_seg, epoch):
     if epoch <= 2:
-        l = 0.1
+        l_arc = 100
+        l_scops = 1
     elif 2 < epoch < 10:
-        l = 0.01
+        l_arc = 10
+        l_scops = 1
     else:
-        l = 0
-    total_loss = loss + l*loss_seg
+        l_arc = 1
+        l_scops = 0
+    total_loss = l_arc*loss + l_scops*loss_seg
     return total_loss
 
 
